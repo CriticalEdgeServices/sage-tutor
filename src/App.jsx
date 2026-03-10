@@ -304,12 +304,20 @@ If she naturally transitions back to homework, follow her lead.`;
 
 // ─── API helper ──────────────────────────────────────────────────────
 async function callClaude(system, messages, max = 1300) {
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
+  const res = await fetch("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: max, system, messages }),
+    body: JSON.stringify({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: max,
+      system,
+      messages,
+    }),
   });
-  if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e?.error?.message || `API error ${res.status}`); }
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    throw new Error(e?.error?.message || `API error ${res.status}`);
+  }
   const d = await res.json();
   return d.content?.find(b => b.type === "text")?.text || "";
 }
@@ -651,7 +659,7 @@ function Setup({ onConfirm }) {
 // ═══════════════════════════════════════════════════════════════════
 export default function SageV3() {
   const [apiKey, setApiKey]           = useState("");
-  const [screen, setScreen]           = useState("setup");
+ const [screen, setScreen] = useState("onboarding");
   const [memory, setMemory]           = useState(null);
   const [messages, setMessages]       = useState([]);
   const [apiHistory, setApiHistory]   = useState([]);
@@ -668,15 +676,11 @@ export default function SageV3() {
   const textareaRef = useRef(null);
 
   // Restore session
-  useEffect(() => {
-    const savedKey = sessionStorage.getItem("sage_key");
-    if (savedKey) {
-      setApiKey(savedKey);
-      const mem = loadMemory();
-      if (mem) { setMemory(mem); setScreen("chat"); }
-      else setScreen("onboarding");
-    }
-  }, []);
+  uuseEffect(() => {
+  const mem = loadMemory();
+  if (mem) { setMemory(mem); setScreen("chat"); }
+  else setScreen("onboarding");
+}, []);
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, loading]);
 
