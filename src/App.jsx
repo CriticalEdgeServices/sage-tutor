@@ -1,3 +1,5 @@
+import { useState, useRef, useEffect } from "react";
+
 // ═══════════════════════════════════════════════════════════════════
 //  SAGE v4 — Personalized Multi-Agent Tutor
 //  Features: Expanded hobbies · Asia's palette · Real-world rewards
@@ -859,6 +861,7 @@ function Onboarding({ onComplete }) {
 //  MAIN APP
 // ═══════════════════════════════════════════════════════════════════
 export default function SageV4() {
+  if (window.location.search.includes("parent") || window.location.pathname.includes("parent")) return null;
   const [screen, setScreen]           = useState("loading"); // ← starts as loading now
   const [memory, setMemory]           = useState(null);
   const [messages, setMessages]       = useState([]);
@@ -877,15 +880,6 @@ export default function SageV4() {
   const textareaRef = useRef(null);
 
   // ── Load memory: try cloud first, fall back to localStorage ──────────
- useEffect(() => {
-  async function loadAndStart() {
-    // Add this check at the top
-    if (window.location.hash === '#parent') return;
-    
-    // ... rest of the existing code
-  }
-  loadAndStart();
-}, []);
   useEffect(() => {
     async function loadAndStart() {
       let mem = null;
