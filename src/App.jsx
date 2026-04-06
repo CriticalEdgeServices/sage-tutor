@@ -1,8 +1,3 @@
-if (window.location.hash === '#parent') {
-  window.location.href = window.location.origin + '/parent-dashboard';
-}
-import { useState, useRef, useEffect } from "react";
-
 // ═══════════════════════════════════════════════════════════════════
 //  SAGE v4 — Personalized Multi-Agent Tutor
 //  Features: Expanded hobbies · Asia's palette · Real-world rewards
@@ -882,6 +877,15 @@ export default function SageV4() {
   const textareaRef = useRef(null);
 
   // ── Load memory: try cloud first, fall back to localStorage ──────────
+ useEffect(() => {
+  async function loadAndStart() {
+    // Add this check at the top
+    if (window.location.hash === '#parent') return;
+    
+    // ... rest of the existing code
+  }
+  loadAndStart();
+}, []);
   useEffect(() => {
     async function loadAndStart() {
       let mem = null;
