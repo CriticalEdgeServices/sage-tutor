@@ -4,8 +4,11 @@ import './index.css'
 import App from './App.jsx'
 import ParentDashboard from './ParentDashboard.jsx'
 
+const hash = window.location.hash;
+const path = window.location.pathname;
+const isParent = path.startsWith('/parent') || hash === '#parent' || hash.startsWith('#/parent');
+
 function Root() {
-  const isParent = window.location.hash === '#parent' || window.location.pathname.startsWith('/parent');
   return isParent ? <ParentDashboard /> : <App />;
 }
 
