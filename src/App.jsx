@@ -8,9 +8,6 @@ import { useState, useRef, useEffect } from "react";
 // ═══════════════════════════════════════════════════════════════════
 
 const MEMORY_KEY = "sage_v4_memory";
-const VPS_URL = "https://187.77.222.237:3001"; // direct IP — swap for domain if added later
-const SAGE_SECRET = import.meta.env.VITE_SAGE_SECRET || "sage-ladypie-2025";
-
 // ─── Memory helpers (cloud + local) ──────────────────────────────
 function getSessionId(profile) {
   // Use the student's name as session ID — any device with same name shares memory
@@ -19,9 +16,7 @@ function getSessionId(profile) {
 
 async function loadMemoryCloud(sessionId) {
   try {
-    const res = await fetch(`http://187.77.222.237:3001/memory/${sessionId}`, {
-      headers: { "x-sage-secret": SAGE_SECRET },
-    });
+    const res = await fetch(`/api/memory-load?sessionId=${sessionId}`);
     if (!res.ok) return null;
     const json = await res.json();
     return json.found ? json.data : null;
@@ -32,13 +27,10 @@ async function loadMemoryCloud(sessionId) {
 
 async function saveMemoryCloud(sessionId, data) {
   try {
-    await fetch(`http://187.77.222.237:3001/memory/${sessionId}`, {
+    await fetch("/api/memory-save", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-sage-secret": SAGE_SECRET,
-      },
-      body: JSON.stringify({ data }),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId, data }),
     });
   } catch {
     // Silent fail — localStorage is the fallback
