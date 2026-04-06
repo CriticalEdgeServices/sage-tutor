@@ -1,3 +1,6 @@
+if (window.location.hash === '#parent') {
+  window.location.href = window.location.origin + '/parent-dashboard';
+}
 import { useState, useRef, useEffect } from "react";
 
 // ═══════════════════════════════════════════════════════════════════
