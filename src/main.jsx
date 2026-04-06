@@ -1,19 +1,20 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
-import App from './App.jsx'
-import ParentDashboard from './ParentDashboard.jsx'
 
-const hash = window.location.hash;
-const path = window.location.pathname;
-const isParent = path.startsWith('/parent') || hash === '#parent' || hash.startsWith('#/parent');
+const isParent = window.location.pathname.includes('parent') || 
+                 window.location.hash.includes('parent') ||
+                 window.location.search.includes('parent');
 
-function Root() {
-  return isParent ? <ParentDashboard /> : <App />;
+async function init() {
+  const root = createRoot(document.getElementById('root'));
+  if (isParent) {
+    const { default: ParentDashboard } = await import('./ParentDashboard.jsx');
+    root.render(<StrictMode><ParentDashboard /></StrictMode>);
+  } else {
+    const { default: App } = await import('./App.jsx');
+    root.render(<StrictMode><App /></StrictMode>);
+  }
 }
 
-createRoot(document.getElementById('root')).render(
-  <StrictMode>
-    <Root />
-  </StrictMode>,
-)
+init();
