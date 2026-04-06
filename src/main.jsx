@@ -5,7 +5,7 @@ import App from './App.jsx'
 import ParentDashboard from './ParentDashboard.jsx'
 
 function Root() {
-  const isParent = window.location.pathname.startsWith('/parent');
+  const isParent = window.location.hash === '#parent' || window.location.pathname.startsWith('/parent');
   return isParent ? <ParentDashboard /> : <App />;
 }
 
