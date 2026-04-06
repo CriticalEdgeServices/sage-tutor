@@ -4,63 +4,74 @@ import { useState, useRef, useEffect } from "react";
 //  SAGE v4 — Personalized Multi-Agent Tutor
 //  Features: Expanded hobbies · Asia's palette · Real-world rewards
 //            File uploads · Scaffolded answers · Richer memory
-//            Cloud memory sync (VPS) · Parent dashboard support
+//            Cloud sync: VPS → localStorage fallback
 // ═══════════════════════════════════════════════════════════════════
 
 const MEMORY_KEY = "sage_v4_memory";
+const VPS_URL = "https://187.77.222.237:3001"; // direct IP — swap for domain if added later
+const SAGE_SECRET = import.meta.env.VITE_SAGE_SECRET || "sage-ladypie-2025";
 
-// ─── Cloud memory config ──────────────────────────────────────────────
-// Set these to match your VPS setup
-const CLOUD_URL    = "http://187.77.222.237:3001";  // ← your VPS IP/domain + port
-const CLOUD_SECRET = import.meta.env.VITE_SAGE_SECRET || "";  // ← set in Vercel env vars
-const USER_ID      = "asia";
+// ─── Memory helpers (cloud + local) ──────────────────────────────
+function getSessionId(profile) {
+  // Use the student's name as session ID — any device with same name shares memory
+  return (profile?.name || "asia").toLowerCase().replace(/\s+/g, "_");
+}
 
-// Cloud sync helpers — fail silently so app always works offline too
-async function cloudGet() {
-  if (!CLOUD_SECRET) return null;
+async function loadMemoryCloud(sessionId) {
   try {
-    const res = await fetch(`${CLOUD_URL}/memory/${USER_ID}`, {
-      headers: { "x-sage-secret": CLOUD_SECRET },
-      signal: AbortSignal.timeout(4000),
+    const res = await fetch(`http://187.77.222.237:3001/memory/${sessionId}`, {
+      headers: { "x-sage-secret": SAGE_SECRET },
     });
     if (!res.ok) return null;
-    const { memory } = await res.json();
-    return memory;
-  } catch { return null; }
+    const json = await res.json();
+    return json.found ? json.data : null;
+  } catch {
+    return null;
+  }
 }
 
-async function cloudSave(memory) {
-  if (!CLOUD_SECRET) return;
+async function saveMemoryCloud(sessionId, data) {
   try {
-    await fetch(`${CLOUD_URL}/memory/${USER_ID}`, {
+    await fetch(`http://187.77.222.237:3001/memory/${sessionId}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "x-sage-secret": CLOUD_SECRET },
-      body: JSON.stringify({ memory }),
-      signal: AbortSignal.timeout(4000),
+      headers: {
+        "Content-Type": "application/json",
+        "x-sage-secret": SAGE_SECRET,
+      },
+      body: JSON.stringify({ data }),
     });
-  } catch { /* silent fail — localStorage is the source of truth */ }
+  } catch {
+    // Silent fail — localStorage is the fallback
+  }
 }
 
-async function cloudSaveSession(summary, agent, subject) {
-  if (!CLOUD_SECRET) return;
-  try {
-    await fetch(`${CLOUD_URL}/sessions/${USER_ID}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-sage-secret": CLOUD_SECRET },
-      body: JSON.stringify({ summary, agent, subject }),
-      signal: AbortSignal.timeout(4000),
-    });
-  } catch { /* silent fail */ }
-}
-
-function loadMemory() {
+function loadMemoryLocal() {
   try { const r = localStorage.getItem(MEMORY_KEY); return r ? JSON.parse(r) : null; }
   catch { return null; }
 }
-function saveMemory(m) {
+
+function saveMemoryLocal(m) {
   try { localStorage.setItem(MEMORY_KEY, JSON.stringify(m)); } catch {}
-  cloudSave(m); // fire-and-forget, no await needed
 }
+
+// Load: try VPS first, fall back to localStorage
+async function loadMemory(profile) {
+  const sessionId = getSessionId(profile);
+  const cloud = await loadMemoryCloud(sessionId);
+  if (cloud) {
+    saveMemoryLocal(cloud); // sync cloud → local
+    return cloud;
+  }
+  return loadMemoryLocal();
+}
+
+// Save: write to both
+async function saveMemory(m) {
+  saveMemoryLocal(m);
+  const sessionId = getSessionId(m.profile);
+  await saveMemoryCloud(sessionId, m);
+}
+
 function initMemory(profile) {
   return {
     profile,
@@ -489,20 +500,6 @@ const fileToBase64 = (file) => new Promise((res, rej) => {
   r.readAsDataURL(file);
 });
 
-// ─── Session summary helper ───────────────────────────────────────────
-// Generates a 1-sentence summary of the exchange for the parent dashboard
-async function generateSessionSummary(userText, replyText, agent, subject) {
-  try {
-    const prompt = `In ONE sentence (max 20 words), summarize what this tutoring exchange was about.
-Student said: "${userText?.slice(0, 200) || "[file/image]"}"
-Sage responded about: "${replyText?.slice(0, 200)}"
-Agent: ${agent}, Subject: ${subject || "general"}
-Write only the summary sentence, nothing else.`;
-    const summary = await callClaude(prompt, [{ role: "user", content: [{ type: "text", text: "Summarize." }] }], 80);
-    return summary.trim();
-  } catch { return null; }
-}
-
 // ─── Achievement helpers ──────────────────────────────────────────────
 function checkAchievements(memory, trigger) {
   const earned = [...(memory.achievements || [])];
@@ -592,11 +589,13 @@ function RewardModal({ reward, onClose }) {
           width: "200px", height: "200px", borderRadius: "50%",
           background: "radial-gradient(circle, rgba(225,29,72,0.2) 0%, transparent 70%)",
           pointerEvents: "none" }} />
+
         <div style={{ fontSize: "56px", marginBottom: "18px" }}>{reward.label.split(" ")[0]}</div>
         <h2 style={{ color: C.textPrimary, fontSize: "22px", fontWeight: "700", marginBottom: "8px",
           fontFamily: "monospace", letterSpacing: "-0.02em" }}>Reward Unlocked!</h2>
         <p style={{ color: C.textSec, fontSize: "15px", lineHeight: "1.7", marginBottom: "24px",
           fontFamily: "Georgia, serif", fontStyle: "italic" }}>{reward.desc}</p>
+
         {isCraft && pattern && (
           <div style={{ background: C.bgCard, border: `1px solid ${C.border}`,
             borderRadius: "14px", padding: "18px", marginBottom: "24px" }}>
@@ -611,6 +610,7 @@ function RewardModal({ reward, onClose }) {
             }}>Browse Patterns →</a>
           </div>
         )}
+
         {reward.mission && (
           <div style={{ background: C.pinkSoft, border: `1px solid ${C.borderWarm}`,
             borderRadius: "14px", padding: "18px", marginBottom: "24px", textAlign: "left" }}>
@@ -620,6 +620,7 @@ function RewardModal({ reward, onClose }) {
               fontFamily: "Georgia, serif", fontStyle: "italic" }}>{reward.mission}</p>
           </div>
         )}
+
         <button onClick={onClose} style={{
           background: "none", border: `1px solid ${C.border}`, borderRadius: "10px",
           padding: "10px 24px", color: C.textSec, cursor: "pointer",
@@ -861,8 +862,7 @@ function Onboarding({ onComplete }) {
 //  MAIN APP
 // ═══════════════════════════════════════════════════════════════════
 export default function SageV4() {
-  if (window.location.search.includes("parent") || window.location.pathname.includes("parent")) return null;
-  const [screen, setScreen]           = useState("loading"); // ← starts as loading now
+  const [screen, setScreen]           = useState("loading");
   const [memory, setMemory]           = useState(null);
   const [messages, setMessages]       = useState([]);
   const [apiHistory, setApiHistory]   = useState([]);
@@ -873,38 +873,26 @@ export default function SageV4() {
   const [error, setError]             = useState("");
   const [toasts, setToasts]           = useState([]);
   const [pendingReward, setPendingReward] = useState(null);
-  const [cloudSynced, setCloudSynced] = useState(false);
 
   const bottomRef   = useRef(null);
   const fileRef     = useRef(null);
   const textareaRef = useRef(null);
 
-  // ── Load memory: try cloud first, fall back to localStorage ──────────
+  // ─── Boot: check localStorage first for profile name, then load cloud ──
   useEffect(() => {
-    async function loadAndStart() {
-      let mem = null;
-
-      // Try cloud first (4s timeout built into cloudGet)
-      const cloudMem = await cloudGet();
-
-      if (cloudMem) {
-        // Cloud data wins — also update localStorage to keep in sync
-        mem = cloudMem;
-        setCloudSynced(true);
-        try { localStorage.setItem(MEMORY_KEY, JSON.stringify(mem)); } catch {}
-      } else {
-        // Fall back to localStorage
-        mem = loadMemory();
-      }
-
-      if (mem) {
+    async function boot() {
+      // Try localStorage first to get the profile (for session ID)
+      const local = loadMemoryLocal();
+      if (local?.profile) {
+        // We have a profile — try to load from cloud, fall back to local
+        const mem = await loadMemory(local.profile);
         setMemory(mem);
         setScreen("chat");
       } else {
         setScreen("onboarding");
       }
     }
-    loadAndStart();
+    boot();
   }, []);
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, loading]);
@@ -940,10 +928,10 @@ export default function SageV4() {
     finally { setLoading(false); }
   }
 
-  function handleOnboarding(profile) {
+  async function handleOnboarding(profile) {
     const mem = initMemory(profile);
     mem.sessionCount = 1;
-    saveMemory(mem); // saves to both localStorage + cloud
+    await saveMemory(mem);
     setMemory(mem);
     setScreen("chat");
   }
@@ -1014,12 +1002,8 @@ export default function SageV4() {
       updMem.studyPoints = updatedPoints;
       updMem.unlockedRewards = updatedUnlocked;
 
-      saveMemory(updMem); // saves to localStorage + cloud
+      await saveMemory(updMem);
       setMemory(updMem);
-
-      // Fire-and-forget session summary for parent dashboard
-      generateSessionSummary(userText, reply, route.agent, route.subject)
-        .then(summary => { if (summary) cloudSaveSession(summary, route.agent, route.subject); });
 
       if (newAchievements.length > 0) setToasts(prev => [...prev, ...newAchievements]);
       if (newRewards.length > 0) setPendingReward(newRewards[0]);
@@ -1030,22 +1014,19 @@ export default function SageV4() {
 
   function handleKeyDown(e) { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }
 
-  function reset() {
+  async function reset() {
     if (!confirm("Reset Sage completely? This clears all memory and achievements.")) return;
     localStorage.removeItem(MEMORY_KEY);
     setMemory(null); setMessages([]); setApiHistory([]);
     setScreen("onboarding");
   }
 
-  // ── Loading screen ────────────────────────────────────────────────────
+  // Loading screen while we check cloud memory
   if (screen === "loading") {
     return (
-      <div style={{ minHeight: "100vh", background: C.bg, display: "flex",
-        alignItems: "center", justifyContent: "center", flexDirection: "column", gap: "16px" }}>
-        <div style={{ width: "42px", height: "42px", borderRadius: "50%", background: C.gradMain,
-          display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px",
-          boxShadow: "0 4px 20px rgba(225,29,72,0.4)" }}>✦</div>
-        <div style={{ color: C.textMuted, fontSize: "12px", fontFamily: "monospace" }}>loading sage...</div>
+      <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center",
+        justifyContent: "center", fontFamily: "monospace" }}>
+        <div style={{ color: C.textMuted, fontSize: "13px" }}>loading sage...</div>
       </div>
     );
   }
@@ -1096,12 +1077,7 @@ export default function SageV4() {
         </div>
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "10px" }}>
           {loading && activeAgent && <AgentBadge agent={activeAgent} />}
-          {!loading && (
-            <span style={{ color: cloudSynced ? "#4ade80" : "#fbbf24", fontSize: "11px", fontFamily: "monospace" }}
-              title={cloudSynced ? "Cloud synced" : "Local only"}>
-              ● {cloudSynced ? "synced" : "local"}
-            </span>
-          )}
+          {!loading && <span style={{ color: "#4ade80", fontSize: "11px", fontFamily: "monospace" }}>● ready</span>}
           <button onClick={reset} style={{ background: "none", border: `1px solid ${C.border}`,
             borderRadius: "7px", padding: "3px 10px", color: C.textMuted, fontSize: "11px",
             cursor: "pointer", fontFamily: "monospace" }}>↺ reset</button>
