@@ -2,9 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 
-const isParent = window.location.pathname.includes('parent') || 
-                 window.location.hash.includes('parent') ||
-                 window.location.search.includes('parent');
+const isParent = document.documentElement.getAttribute('data-parent') === 'true';
 
 async function init() {
   const root = createRoot(document.getElementById('root'));
